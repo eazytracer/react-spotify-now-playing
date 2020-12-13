@@ -1,60 +1,78 @@
-import React from 'react';
-import logo from './logo.svg';
-import { Counter } from './features/counter/Counter';
-import { Authorization } from './features/authorization/Authorization';
-import { SpotifyExample } from './features/spotifyExample/SpotifyExample';
+import React, {useState, useEffect} from 'react';
+import { getCurrentlyPlayingAsync } from "./services/SpotifyServices";
+import { getAuthorizeHref } from './oauthConfig';
+import { getHashParams, removeHashParamsFromUrl } from './utils/hashUtils';
+import { CurrentlyPlaying } from "./components/CurrentlyPlaying";
 import './App.css';
+import 'bootstrap/dist/css/bootstrap.min.css';
+
+const hashParams = getHashParams();
+console.log("them hash params", hashParams);
+const access_token = hashParams.get("access_token");
+const expires_in = hashParams.get("expires_in");
+removeHashParamsFromUrl();
+
+
+export interface AuthData {
+  loggedIn: boolean;
+  authToken: string;
+  refreshToken: string;
+  expirationTime: number;
+}
+
+export interface NowPlaying {
+  updateTime: number;
+  progressMs: number;
+  durationMs: number;
+  isPlaying: boolean;
+  albumArt: string;
+  artistNames: string;
+  trackName: string;
+}
 
 function App() {
+  const [authData, setAuthData] = useState<AuthData>({loggedIn: false, authToken: '', refreshToken: '', expirationTime: 0});
+  const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
+
+  useEffect(() => {
+    if (access_token) {
+      const newAuthData: AuthData = {
+        loggedIn: true,
+        authToken: access_token,
+        expirationTime: Number(expires_in),
+        refreshToken: access_token
+      };
+      setAuthData(newAuthData);
+    } else if (!authData.loggedIn) {
+      window.open(getAuthorizeHref(), '_self');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (authData.loggedIn) {
+      const interval = setInterval(() => {
+        {
+          getCurrentlyPlayingAsync(authData.authToken, setNowPlaying)
+        }
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+    }, [authData]);
+
+
   return (
     <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <Authorization />
-        <SpotifyExample />
-        <Counter />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <span>
-          <span>Learn </span>
-          <a
-            className="App-link"
-            href="https://reactjs.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            React
-          </a>
-          <span>, </span>
-          <a
-            className="App-link"
-            href="https://redux.js.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Redux
-          </a>
-          <span>, </span>
-          <a
-            className="App-link"
-            href="https://redux-toolkit.js.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Redux Toolkit
-          </a>
-          ,<span> and </span>
-          <a
-            className="App-link"
-            href="https://react-redux.js.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            React Redux
-          </a>
-        </span>
-      </header>
+      <div className="NowPlaying">
+        {nowPlaying &&
+            <CurrentlyPlaying albumArt={nowPlaying.albumArt}
+                              artistNames={nowPlaying.artistNames}
+                              durationMs={nowPlaying.durationMs}
+                              isPlaying={nowPlaying.isPlaying}
+                              progressMs={nowPlaying.progressMs}
+                              trackName={nowPlaying.trackName}
+                              updateTime={nowPlaying.updateTime}/>
+        }
+      </div>
     </div>
   );
 }
